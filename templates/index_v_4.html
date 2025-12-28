@@ -1,0 +1,16 @@
+<body>
+        <h1>Internal Finance Portal</h1>
+        <p>Welcome back, <b>{{ user_name }}</b></p>
+        
+        <form method="POST">
+            <label>Enter Monthly Savings:</label>
+            <input type="number" name="savings_input" required>
+            <input type="submit" value="Calculate">
+        </form>
+
+        {% if money %}
+            <hr>
+            <h3>Result:</h3>
+            <p>Projected Annual Savings: <b>{{ money }}</b></p>
+        {% endif %}
+    </body>

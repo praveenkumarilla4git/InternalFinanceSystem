@@ -1,0 +1,10 @@
+# Ignore the database file
+finance.db
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore environment folders (if we create one later)
+venv/
+.env

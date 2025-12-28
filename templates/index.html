@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/main_style.css') }}">
+        <title>Finance Portal</title>
+    </head>
+    <body>
+        <h1>Internal Finance Portal</h1>
+        <p>Welcome back, <b>{{ user_name }}</b></p>
+        
+        <form method="POST">
+            <label>Reason / Goal:</label>
+            <input type="text" name="reason_input" placeholder="e.g. Car Fund" required>
+            <br><br>
+            
+            <label>Monthly Amount:</label>
+            <input type="number" name="savings_input" required>
+            
+            <input type="submit" value="Calculate">
+        </form>
+
+        {% if money %}
+            <br>
+            <div style="background-color: #e8f5e9; padding: 10px; display: inline-block; border-radius: 5px;">
+                <h3>Result:</h3>
+                <p>If you save for <b>{{ reason }}</b>, you will have: <b>{{ money }}</b> in a year.</p>
+            </div>
+        {% endif %}
+
+        <hr>
+        
+        <h3>Savings Projection History</h3>
+        <table border="1" style="width:70%; margin:auto; border-collapse: collapse;">
+            <tr style="background-color: #ddd;">
+                <th>ID</th>
+                <th>User</th>
+                <th>Reason</th> <th>Monthly Input</th>
+                <th>Annual Projection</th>
+                <th>Action</th>
+            </tr>
+
+            {% for row in history %}
+            <tr>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] }}</td>
+                <td>{{ row[4] }}</td> <td>{{ row[2] }}</td>
+                <td>{{ row[3] }}</td>
+                <td>
+                    <a href="/delete/{{ row[0] }}" style="color: red; text-decoration: none; font-weight: bold;">
+                        [X] Delete
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br><br>
+    </body>
+</html>
