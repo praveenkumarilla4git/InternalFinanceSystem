@@ -1,0 +1,280 @@
+Project Documentation: Internal Finance System
+1. Overview
+Project Name: Internal Finance System Description: A persistent web application that calculates annual savings projections based on monthly inputs. It allows users to Create, Read, and Delete financial entries. Tech Stack:
+
+Backend: Python (Flask)
+
+Frontend: HTML5, CSS3
+
+Database: SQLite (Embedded)
+
+Architecture: Model-View-Controller (MVC)
+
+2. Project Structure
+Before writing code, create the following folder and file structure exactly as shown. This structure ensures the web server knows where to find designs (templates) and styles (static).
+
+Plaintext
+
+InternalFinanceSystem/
+│
+├── static/
+│   └── css/
+│       └── main_style.css    # (The "Skin": Colors and layout)
+│
+├── templates/
+│   └── index.html            # (The "Skeleton": The actual web page)
+│
+├── core.py                   # (The "Brain": Pure math logic)
+├── schema.py                 # (The "Builder": Creates the database)
+├── main.py                   # (The "Manager": Connects everything)
+└── requirements.txt          # (Dependencies list)
+3. Step-by-Step Implementation
+Step 1: Install Dependencies
+Create a file named requirements.txt to list the tools we need. File: requirements.txt
+
+Plaintext
+
+flask
+Command to install: Run pip install -r requirements.txt in your terminal.
+
+Step 2: The "Brain" (Model)
+This file contains pure logic. It doesn't care about the web or databases. It just does math. File: core.py
+
+Python
+
+def calculate_savings(monthly_amount):
+    """
+    Takes a monthly saving amount and projects it for 1 year.
+    Why separate this? 
+    If we later change the logic (e.g., add compound interest),
+    we only edit this file, not the main server code.
+    """
+    annual_total = monthly_amount * 12
+    return annual_total
+Step 3: The "Builder" (Database Setup)
+This script builds the storage cabinet. We run this once to create the .db file. File: schema.py
+
+Python
+
+import sqlite3
+
+# 1. Connect to file (creates it if missing)
+connection = sqlite3.connect("finance.db")
+cursor = connection.cursor()
+
+# 2. Define the Table Structure (Schema)
+# We use 'IF NOT EXISTS' so this script is safe to run multiple times.
+# We track 5 distinct pieces of data for every entry.
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS users_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique ID for deletion
+        username TEXT,                         -- Who made the entry
+        monthly_savings INTEGER,               -- The input number
+        projected_annual INTEGER,              -- The calculated result
+        reason TEXT                            -- The context (e.g. "Car")
+    );
+    """
+)
+
+connection.commit() # SAVE the changes
+connection.close()
+print("Database initialized successfully.")
+Step 4: The "Skin" (Styling)
+This file defines how the application looks. File: static/css/main_style.css
+
+CSS
+
+body {
+    background-color: #f4f4f9; /* Light Grey-Blue for modern look */
+    font-family: sans-serif;   /* Clean, easy-to-read font */
+    text-align: center;        /* Centers all content */
+}
+
+h1 {
+    color: #2c3e50;            /* Dark Blue header */
+}
+
+table {
+    margin-top: 20px;
+    background-color: white;   /* White background for data table */
+}
+Step 5: The "Skeleton" (Frontend View)
+This is the user interface. It uses Jinja2 syntax (the { ... } parts) to display data sent from Python. File: templates/index.html
+
+HTML
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/main_style.css') }}">
+        <title>Finance Portal</title>
+    </head>
+    <body>
+        <h1>Internal Finance Portal</h1>
+        <p>Welcome back, <b>{{ user_name }}</b></p>
+        
+        <form method="POST">
+            <label>Reason / Goal:</label>
+            <input type="text" name="reason_input" placeholder="e.g. Car Fund" required>
+            <br><br>
+            
+            <label>Monthly Amount:</label>
+            <input type="number" name="savings_input" required>
+            
+            <input type="submit" value="Calculate">
+        </form>
+
+        {% if money %}
+            <br>
+            <div style="background-color: #e8f5e9; padding: 10px; display: inline-block; border-radius: 5px;">
+                <h3>Result:</h3>
+                <p>If you save for <b>{{ reason }}</b>, you will have: <b>{{ money }}</b> in a year.</p>
+            </div>
+        {% endif %}
+
+        <hr>
+        
+        <h3>Savings Projection History</h3>
+        <table border="1" style="width:70%; margin:auto; border-collapse: collapse;">
+            <tr style="background-color: #ddd;">
+                <th>ID</th>
+                <th>User</th>
+                <th>Reason</th>
+                <th>Monthly Input</th>
+                <th>Annual Projection</th>
+                <th>Action</th>
+            </tr>
+
+            {% for row in history %}
+            <tr>
+                <td>{{ row[0] }}</td> <td>{{ row[1] }}</td> <td>{{ row[4] }}</td> <td>{{ row[2] }}</td> <td>{{ row[3] }}</td> <td>
+                    <a href="/delete/{{ row[0] }}" style="color: red; font-weight: bold;">[X] Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br><br>
+    </body>
+</html>
+Step 6: The "Manager" (Controller)
+This is the application entry point. It handles routing, database connections, and traffic control. File: main.py
+
+Python
+
+from flask import Flask, render_template, request, redirect
+import sqlite3
+from core import calculate_savings
+
+# Initialize the Flask App
+app = Flask(__name__)
+
+# --- ROUTE 1: The Home Page (GET to view, POST to submit) ---
+@app.route("/", methods=["GET", "POST"])
+def home():
+    current_user = "Praveen"
+    estimated_annual = None
+    reason_text = None
+    
+    # 1. Connect to DB
+    connection = sqlite3.connect("finance.db")
+    cursor = connection.cursor()
+    
+    # 2. Handle Form Submission (Create Logic)
+    if request.method == "POST":
+        # Capture input from HTML
+        user_input = int(request.form["savings_input"])
+        reason_text = request.form["reason_input"]
+        
+        # Use Core Logic
+        estimated_annual = calculate_savings(user_input)
+        
+        # Save to Database
+        cursor.execute(
+            "INSERT INTO users_data (username, monthly_savings, projected_annual, reason) VALUES (?, ?, ?, ?)",
+            (current_user, user_input, estimated_annual, reason_text)
+        )
+        connection.commit()
+
+    # 3. Always Fetch History (Read Logic)
+    cursor.execute("SELECT * FROM users_data")
+    db_data = cursor.fetchall() 
+    
+    connection.close()
+
+    # 4. Render the page with all data
+    return render_template("index.html", 
+                           user_name=current_user, 
+                           money=estimated_annual, 
+                           reason=reason_text,
+                           history=db_data)
+
+# --- ROUTE 2: Delete Item (Delete Logic) ---
+@app.route("/delete/<int:row_id>")
+def delete_item(row_id):
+    connection = sqlite3.connect("finance.db")
+    cursor = connection.cursor()
+    
+    # Securely delete the row matching the ID
+    cursor.execute("DELETE FROM users_data WHERE id = ?", (row_id,))
+    
+    connection.commit()
+    connection.close()
+    
+    # Return user to home page immediately
+    return redirect("/")
+
+if __name__ == "__main__":
+    app.run(debug=True)
+4. How to Execute (Run the App)
+Initialize the Database:
+
+Open terminal in project folder.
+
+Run: python schema.py
+
+Result: A file named finance.db will appear.
+
+Start the Server:
+
+Run: python main.py
+
+Result: You will see Running on http://127.0.0.1:5000.
+
+Use the App:
+
+Open browser to http://127.0.0.1:5000.
+
+Enter a Reason and Amount.
+
+Click Calculate.
+
+Verify the table updates.
+
+Click [X] Delete to remove an entry.
+
+5. Version Control (Git Setup)
+To keep the code safe and clean, use this .gitignore file to prevent the database from being uploaded to GitHub.
+
+File: .gitignore
+
+Plaintext
+
+finance.db
+__pycache__/
+*.pyc
+Commands to Save:
+
+Bash
+
+git init
+git add .
+git commit -m "Complete Finance App v1.0"
+
+
+The next step is Docker.
+
+Why Docker?
+Right now, your app works on your laptop because you manually installed Python, Flask, and set up the folders. If you send your code to a friend, it won't work until they do all those manual steps too.
+
+Docker solves this by packaging your Code + Python + Libraries + Database setup into a single "Box" (Container). You can hand this box to anyone (or AWS), and it will run exactly the same way.
