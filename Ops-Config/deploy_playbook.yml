@@ -1,0 +1,36 @@
+---
+- name: Deploy Finance App to 3 Servers
+  hosts: finance_servers
+  become: yes
+  vars:
+    # We will pass these secrets from GitHub Actions
+    docker_username: "{{ lookup('env', 'DOCKER_USERNAME') }}"
+    docker_password: "{{ lookup('env', 'DOCKER_PASSWORD') }}"
+
+  tasks:
+    - name: Install Docker
+      yum:
+        name: docker
+        state: present
+
+    - name: Start Docker Service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Log in to Docker Hub
+      shell: "echo {{ docker_password }} | docker login -u {{ docker_username }} --password-stdin"
+      no_log: true # Keeps your password hidden in logs
+
+    - name: Stop old container (if running)
+      shell: docker stop finance-app || true
+
+    - name: Remove old container (if exists)
+      shell: docker rm finance-app || true
+
+    - name: Pull the latest image
+      shell: docker pull praveenkumarilla459/internal-finance-system:latest
+
+    - name: Run the new container
+      shell: docker run -d -p 5000:5000 --name finance-app praveenkumarilla459/internal-finance-system:latest
