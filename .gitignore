@@ -25,3 +25,6 @@ venv/
 crash.log
 
 # Note: We DO want to commit .terraform.lock.hcl (It locks your provider versions)
+
+# Ignore the .vscode folder (where the big binary plugins live)
+.vscode/*
