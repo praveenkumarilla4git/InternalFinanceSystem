@@ -46,3 +46,19 @@ resource "aws_instance" "app_server" {
     Name = "Finance-Server-${count.index + 1}"
   }
 }
+
+# --- AUTOMATION: GENERATE ANSIBLE INVENTORY ---
+resource "local_file" "ansible_inventory" {
+  # This saves the file in the Ops-Config folder automatically
+  filename = "../Ops-Config/inventory.ini" 
+  
+  # This Template fills in the new IP addresses automatically
+  content  = <<EOT
+[finance_servers]
+${join("\n", aws_instance.app_server[*].public_ip)}
+
+[finance_servers:vars]
+ansible_user=ec2-user
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+EOT
+}
