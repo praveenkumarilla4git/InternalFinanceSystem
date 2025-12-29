@@ -1,0 +1,588 @@
+📘 Operations Manual: Internal Finance System
+Objective: Deploy a Python Flask application using Docker on AWS EC2. OS Version: Amazon Linux 2023 (Latest) Author: Praveen
+
+Phase 1: Local Development (On Laptop)
+Create a folder named InternalFinanceSystem and create the following 5 files inside it.
+
+1. requirements.txt
+This tells Python which libraries we need.
+
+Flask
+
+2. core.py (Business Logic)
+This handles the math.
+
+Python
+
+def calculate_savings(monthly_amount):
+    # Project monthly savings to an annual total
+    return monthly_amount * 12
+	
+	
+3. schema.py (Database Setup)
+This creates the database file automatically.
+
+Python
+
+import sqlite3
+
+connection = sqlite3.connect("finance.db")
+cursor = connection.cursor()
+
+# Create table if it doesn't exist
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_name TEXT,
+        estimated_annual REAL,
+        reason_text TEXT,
+        db_data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+connection.commit()
+connection.close()
+
+
+4. main.py (The Web Server)
+CRITICAL: Note the host="0.0.0.0" at the bottom. This allows the app to be seen from the internet.
+
+Python
+
+from flask import Flask, render_template, request, redirect
+import sqlite3
+import core
+import schema  # Runs the DB setup immediately
+
+app = Flask(__name__)
+
+@app.route("/", methods=["GET", "POST"])
+def home():
+    estimated_annual = 0
+    current_user = "Praveen"
+    reason_text = ""
+    
+    if request.method == "POST":
+        monthly_input = float(request.form.get("monthly_amount"))
+        reason_text = request.form.get("reason_goal")
+        estimated_annual = core.calculate_savings(monthly_input)
+
+        # Save to DB
+        connection = sqlite3.connect("finance.db")
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO users_data (user_name, estimated_annual, reason_text) VALUES (?, ?, ?)", 
+                       (current_user, estimated_annual, reason_text))
+        connection.commit()
+        connection.close()
+
+    # Read History
+    connection = sqlite3.connect("finance.db")
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM users_data")
+    db_data = cursor.fetchall()
+    connection.close()
+
+    return render_template("index.html", 
+                           user_name=current_user, 
+                           money=estimated_annual, 
+                           reason=reason_text,
+                           history=db_data)
+
+if __name__ == "__main__":
+    # HOST 0.0.0.0 IS REQUIRED FOR DOCKER/CLOUD ACCESS
+    app.run(debug=True, host="0.0.0.0")
+	
+
+5. templates/index.html
+(Create a folder named templates, then create this file inside it).
+
+HTML
+
+<!DOCTYPE html>
+<html>
+<head><title>Finance Portal</title></head>
+<body style="text-align:center; font-family: sans-serif;">
+    <h2>Internal Finance Portal</h2>
+    <p>Welcome back, <b>{{ user_name }}</b></p>
+    <form method="POST">
+        Reason / Goal: <input type="text" name="reason_goal" required> <br><br>
+        Monthly Amount: <input type="number" name="monthly_amount" required>
+        <button type="submit">Calculate</button>
+    </form>
+    <hr>
+    <h3>Savings Projection History</h3>
+    <table border="1" style="margin: 0 auto;">
+        <tr>
+            <th>ID</th>
+            <th>Reason</th>
+            <th>Annual Projection</th>
+        </tr>
+        {% for row in history %}
+        <tr>
+            <td>{{ row[0] }}</td>
+            <td>{{ row[3] }}</td>
+            <td>{{ row[2] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
+
+6. Dockerfile (The Blueprint)
+Create a file named exactly Dockerfile (no extension).
+
+Dockerfile
+
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN python schema.py
+CMD ["python", "main.py"]
+
+
+
+Phase 2: Push to GitHub (On Laptop)
+Open Terminal in VS Code.
+
+Run these commands to save and upload:
+
+Bash
+
+git init
+git add .
+git commit -m "Initial Deployment Code"
+# Replace URL below with your actual repository URL
+git remote add origin https://github.com/praveenkumarilla4git/InternalFinanceSystem.git
+git push -u origin main
+
+
+Phase 3: Server Setup (On AWS Cloud)
+Launch Instance:
+
+OS: Amazon Linux 2023.
+
+Instance Type: t2.micro or t3.micro.
+
+Key Pair: Select your .pem key.
+
+SSH Login:
+
+Bash
+
+ssh -i "your-key.pem" ec2-user@YOUR_PUBLIC_IP
+
+
+Execution Steps (Copy-Paste Block)
+Run these commands one by one on the Black Server Screen.
+
+1. Clean up Pre-installed Tools: (Amazon Linux 2023 comes with "Podman", which conflicts with Docker).
+
+Bash
+
+sudo yum remove -y podman podman-docker
+Expected Output: "Complete!"
+
+
+2. Install Real Docker & Git:
+
+Bash
+
+sudo yum install -y docker git
+Expected Output: "Complete!"
+
+
+3. Start Docker Service:
+
+Bash
+
+sudo service docker start
+sudo systemctl enable docker
+
+Expected Output: "Created symlink..."
+
+4. Fix User Permissions: (Allows ec2-user to run Docker without sudo).
+
+Bash
+
+sudo usermod -a -G docker ec2-user
+newgrp docker
+
+5. Verification:
+
+Bash
+
+docker --version
+Expected Output: Docker version 25.0.x...
+
+
+Phase 4: Deployment (On AWS Cloud)
+1. Download the App:
+
+Bash
+
+git clone https://github.com/praveenkumarilla4git/InternalFinanceSystem.git
+cd InternalFinanceSystem
+
+2. Build the Docker Image:
+
+Bash
+
+docker build -t finance-app .
+
+Expected Output: Steps 1/6 to 6/6 complete. "naming to docker.io/library/finance-app".
+
+3. Run the Container:
+
+Bash
+
+docker run -d -p 5000:5000 finance-app
+
+Expected Output: A long string of characters (Container ID).
+
+4. verify it is running:
+
+Bash
+
+docker ps
+Expected Output: You should see 0.0.0.0:5000->5000/tcp under PORTS.
+
+
+Phase 5: Go Live (Security Group)
+The app is running, but the firewall is closed.
+
+Go to AWS Console > EC2.
+
+Select your Instance -> Click "Security" Tab.
+
+Click the Security Group ID link.
+
+Click "Edit inbound rules".
+
+Click "Add rule".
+
+Type: Custom TCP
+
+Port range: 5000
+
+Source: 0.0.0.0/0 (Anywhere)
+
+Click "Save rules".
+
+Phase 6: Final Verification
+Open your web browser and navigate to: http://YOUR_EC2_PUBLIC_IP:5000
+
+Success Criteria:
+
+You see the "Internal Finance Portal" header.
+
+You can type a number and click "Calculate".
+
+The page reloads and shows your saved data in the table below.
+
+
+
+📘 PART 2: AUTOMATION (CI/CD)
+Objective: Replace manual SSH commands with a GitHub Actions pipeline. Prerequisite: The application must be running on EC2 (Phase 1-6 completed).
+
+Phase 7: Create AWS Robot User (IAM)
+We need to give GitHub permission to access your AWS account.
+Log in to AWS Console and search for IAM.
+Click Users -> Create user.
+Name: github-deployer.
+Permissions: Select "Attach policies directly".
+Search for and check: AmazonEC2FullAccess.
+Click Create user.
+
+Generate Keys
+Click on the new user (github-deployer).
+Go to Security credentials tab.
+Scroll to Access keys -> Create access key.
+Select CLI -> Next -> Create.
+CRITICAL: Copy the Access Key and Secret Access Key immediately (or download the CSV). You will not see them again.
+
+Phase 8: Configure GitHub Vault
+We store the keys securely so the robot can use them.
+Go to your GitHub Repo -> Settings.
+Select Secrets and variables (Left Menu) -> Actions.
+
+Click New repository secret for each item below:NameValue to PasteAWS_ACCESS_KEY_IDYour Short Key (starts with AKIA...)AWS_SECRET_ACCESS_KEYYour Long Secret Key (starts with random text)EC2_HOSTYour EC2 Public IP (e.g., 18.232.178.238)EC2_SSH_KEYOpen your .pem file in Notepad. Copy EVERYTHING (from -----BEGIN... to -----END...) and paste it here.Phase 9: Create the Pipeline ScriptThis file tells GitHub what to do when you push code.In VS Code, create a folder named .github (don't forget the dot).Inside .github, create a folder named workflows.Inside workflows, create a file named deploy.yml.Copy/Paste this code into deploy.yml:YAMLname: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # 1. Navigate to project folder
+          cd InternalFinanceSystem
+          
+          # 2. Pull latest changes
+          git pull origin main
+          
+          # 3. Rebuild Image
+          docker build -t finance-app .
+          
+          # 4. Stop old container (ignore error if none running)
+          docker stop $(docker ps -q) || true
+          
+          # 5. Run new container
+          docker run -d -p 5000:5000 finance-app
+		  
+		  
+Phase 10: Trigger and Verify
+Modify Code: Change text in templates/index.html (e.g., add "v2.0").
+
+Push:
+
+Bash
+
+git add .
+git commit -m "Testing Pipeline"
+git push
+
+
+Verify:
+
+Go to GitHub -> Actions tab.
+
+Wait for the circle to turn Green ✅.
+
+Refresh your live website URL.
+
+
+Milestone Complete
+You have successfully implemented a CI/CD pipeline. Next Step: Infrastructure as Code (Terraform) to automate the server creation itself.
+
+
+
+📘 PART 3: INFRASTRUCTURE AS CODE (TERRAFORM)
+Objective: Automate the creation of the AWS Server (EC2) and Firewall (Security Group). Prerequisite: AWS CLI Keys available.
+
+Phase 11: Setup Workspace (On Laptop)
+Download Terraform: Get the Windows binary from terraform.io.
+
+Organize Project:
+
+Create a folder named Ops-Infra inside your main project.
+
+Place terraform.exe inside this folder.
+
+Place your .pem key file (e.g., batch3.pem) inside this folder.
+
+Phase 12: Create Configuration Files
+Create the following 4 files inside Ops-Infra.
+
+1. variables.tf (The Inputs)
+
+Terraform
+
+variable "aws_region" { default = "us-east-1" }
+
+variable "aws_access_key" { sensitive = true }
+variable "aws_secret_key" { sensitive = true }
+
+variable "key_name" { default = "batch3" } # Your existing AWS Key name
+variable "ami_id"   { default = "ami-051f7e7f6c2f40dc1" } # Amazon Linux 2023
+
+variable "instance_type" { default = "t3.micro" }
+
+outputs.tf (The Results)
+
+Terraform
+
+output "server_public_ip" {
+  value = aws_instance.app_server.public_ip
+}
+
+terraform.tfvars (The Secrets - DO NOT SHARE)
+
+Terraform
+
+aws_access_key = "YOUR_ACCESS_KEY"
+aws_secret_key = "YOUR_SECRET_KEY"
+key_name       = "batch3"
+
+
+main.tf (The Logic)
+
+Terraform
+
+provider "aws" {
+  region     = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
+}
+
+resource "aws_security_group" "web_firewall" {
+  name        = "terraform-firewall"
+  description = "Allow HTTP and SSH"
+
+  ingress { # SSH
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress { # Flask App
+    from_port = 5000
+    to_port = 5000
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress { # Outbound Internet
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "app_server" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.web_firewall.id]
+
+  tags = { Name = "Terraform-Automated-Server" }
+}
+
+Phase 13: Execution
+Run these commands in the Terminal (inside Ops-Infra):
+
+Initialize: Download AWS plugins.
+
+PowerShell
+
+./terraform init
+Preview: Check what will be created.
+
+PowerShell
+
+./terraform plan
+Deploy: Build the actual server.
+
+PowerShell
+
+./terraform apply
+# Type 'yes' when prompted
+Success Criteria:
+
+Terminal shows green text: Apply complete! Resources: 1 added.
+
+Terminal shows server_public_ip = "98.92.xx.xx".
+
+AWS Console shows the new instance running.
+
+
+
+PART 4: CONFIGURATION MANAGEMENT (ANSIBLE)
+Objective: Automate the installation of software (Docker, Git) on the new server. Prerequisite: Server created via Terraform.
+
+Phase 14: Define the "Recipe" (Playbook)
+Create Folder: Ops-Config (inside main project).
+
+Create File: playbook.yml.
+
+playbook.yml Content:
+
+---
+- name: Setup Docker and Git on Amazon Linux 2023
+  hosts: localhost
+  connection: local
+  become: yes
+
+  tasks:
+    - name: Remove conflicting Podman packages
+      yum:
+        name:
+          - podman
+          - podman-docker
+        state: absent
+
+    - name: Install Docker and Git (and Python Pip)
+      yum:
+        name:
+          - docker
+          - git
+          - python3-pip
+        state: present
+
+    - name: Install Ansible via Pip (Required for AL2023)
+      pip:
+        name: ansible
+        executable: pip3
+
+    - name: Start Docker Service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add User to Docker Group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+		
+		
+		
+Phase 15: Execution (The Push Method)
+Since Ansible does not run on Windows, we upload the playbook to the Linux server and run it there.
+
+1. Copy Playbook to Server (Run from Laptop Terminal):
+
+
+scp -i "../Ops-Infra/batch3.pem" playbook.yml ec2-user@YOUR_NEW_IP:/home/ec2-user/
+
+
+2. Execute on Server (SSH in first):
+
+# SSH Login
+ssh -i "../Ops-Infra/batch3.pem" ec2-user@YOUR_NEW_IP
+
+# Install Ansible (One-time setup for AL2023)
+sudo dnf install python3-pip -y
+sudo pip3 install ansible
+
+# Run the Playbook
+ansible-playbook playbook.yml
+
+Success Criteria:
+
+Output shows changed=3 (or similar).
+
+docker --version returns a valid version number.
+
+
+🚀 The Final "Missing Link"
+You now have a perfect server, BUT...
+
+Your GitHub Pipeline is still deploying to the Old Server (18.232...).
+
+This New Server (98.92...) is currently empty (no code).
+
+
+
+
+
+
+
+
+

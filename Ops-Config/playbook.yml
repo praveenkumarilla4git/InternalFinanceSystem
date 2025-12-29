@@ -1,0 +1,32 @@
+---
+- name: Setup Docker and Git on Amazon Linux 2023
+  hosts: localhost
+  connection: local
+  become: yes  # This means "Run as sudo"
+
+  tasks:
+    - name: Remove conflicting Podman packages (Amazon Linux 2023 default)
+      yum:
+        name:
+          - podman
+          - podman-docker
+        state: absent
+
+    - name: Install Docker and Git
+      yum:
+        name:
+          - docker
+          - git
+        state: present
+
+    - name: Start Docker Service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to Docker group (so you don't need sudo later)
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
