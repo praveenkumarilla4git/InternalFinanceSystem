@@ -49,4 +49,5 @@ def delete_item(row_id):
     return redirect("/")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Ensure this part is exactly as shown:
+    app.run(debug=True, host="0.0.0.0")
