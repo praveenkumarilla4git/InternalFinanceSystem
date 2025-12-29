@@ -1,9 +1,9 @@
-output "server_public_ip" {
-  description = "The public IP address of the web server"
-  value       = aws_instance.app_server.public_ip
+output "server_ips" {
+  description = "Public IPs of all 3 servers"
+  value       = aws_instance.app_server[*].public_ip
 }
 
-output "server_id" {
-  description = "The ID of the EC2 instance"
-  value       = aws_instance.app_server.id
+output "server_ids" {
+  description = "IDs of all 3 servers"
+  value       = aws_instance.app_server[*].id
 }

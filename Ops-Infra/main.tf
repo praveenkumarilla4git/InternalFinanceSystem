@@ -31,15 +31,18 @@ resource "aws_security_group" "web_firewall" {
 }
 
 resource "aws_instance" "app_server" {
-  ami                    = var.ami_id
-  
-  # CHANGED: Now using the variable from variables.tf
-  instance_type          = var.instance_type
-  
-  key_name               = var.key_name
+  # --- SCALE TO 3 SERVERS ---
+  count = 3 
+
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  key_name      = var.key_name
+
+  # Attach the existing security group
   vpc_security_group_ids = [aws_security_group.web_firewall.id]
 
+  # Dynamic Names: Finance-Server-1, Finance-Server-2, etc.
   tags = {
-    Name = "Terraform-Automated-Server"
+    Name = "Finance-Server-${count.index + 1}"
   }
 }
