@@ -53,6 +53,6 @@ jobs:
           # 4. Pull the NEW image we just built
           sudo docker pull praveenkumarilla4git/internal-finance-system:latest
           
-          # 5. Run the new container
+          # 5. Run the new container to run
           sudo docker run -d -p 5000:5000 --name finance-app praveenkumarilla4git/internal-finance-system:latest
         '
