@@ -5,39 +5,49 @@ import os
 def update_readme():
     print("🔄 Fetching Load Balancer URL from Terraform...")
 
-    # 1. Enter Ops-Infra, get the URL, and come back
+    # 1. Get the URL
     try:
         os.chdir("Ops-Infra")
-        # Run terraform output command to get the raw URL
         result = subprocess.run(["terraform", "output", "-raw", "alb_dns_name"], 
                                 capture_output=True, text=True, shell=True)
         alb_url = result.stdout.strip()
-        os.chdir("..") # Go back to main folder
+        os.chdir("..")
     except Exception as e:
         print(f"❌ Error running Terraform: {e}")
         return
 
     # 2. Validation
     if not alb_url or "http" not in alb_url:
-        print("❌ Error: No valid URL found. Did 'terraform apply' finish successfully?")
-        print(f"Debug Output: {alb_url}")
+        print(f"❌ Error: Invalid URL found: '{alb_url}'")
         return
 
     print(f"✅ Found New URL: {alb_url}")
 
-    # 3. Read and Update README.md
+    # 3. Update README.md (Now handling the **stars**)
     readme_path = "README.md"
     try:
         with open(readme_path, "r") as f:
             content = f.read()
         
-        # Regex magic: Finds "Current Live URL:" and replaces the rest of the line
-        new_content = re.sub(r"Current Live URL: .*", f"Current Live URL: {alb_url}", content)
+        # FIX: We now look for the stars "**" in the pattern
+        # This matches "**Current Live URL:** [Waiting...]"
+        pattern = r"\*\*Current Live URL:\*\* .*"
+        replacement = f"**Current Live URL:** {alb_url}"
+        
+        # Check if we actually find it before replacing
+        if not re.search(pattern, content):
+            print("❌ Error: Could not find the 'Current Live URL' line in README.md.")
+            print("   -> Make sure your README has a line starting with: **Current Live URL:**")
+            return
+
+        new_content = re.sub(pattern, replacement, content)
 
         with open(readme_path, "w") as f:
             f.write(new_content)
             
-        print("✅ Success! README.md updated.")
+        print("✅ Success! README.md updated locally.")
+        print("   -> Now check the file in VS Code!")
+
     except FileNotFoundError:
         print("❌ Error: Could not find README.md file.")
 
