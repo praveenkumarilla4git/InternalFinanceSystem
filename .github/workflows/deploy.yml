@@ -46,3 +46,17 @@ jobs:
         ANSIBLE_HOST_KEY_CHECKING: "False"
       run: |
         ansible-playbook -i Ops-Config/inventory.ini Ops-Config/deploy_playbook.yml --private-key private_key.pem
+
+    # --- NEW STEP: Create Clickable Summary ---
+    - name: Generate Deployment Report
+      if: success()
+      run: |
+        echo "### 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+        echo "Your application is live on the following servers:" >> $GITHUB_STEP_SUMMARY
+        echo "| Server | IP Address | Link |" >> $GITHUB_STEP_SUMMARY
+        echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+        
+        # Extract IPs from inventory (lines starting with a number)
+        grep -E '^[0-9]' Ops-Config/inventory.ini | while read ip; do
+           echo "| Finance Node | $ip | [Open App](http://$ip:5000) |" >> $GITHUB_STEP_SUMMARY
+        done
