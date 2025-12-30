@@ -770,6 +770,135 @@ cd Ops-Infra
 terraform destroy --auto-approve
 
 
+📘 PART 6: STATE MANAGEMENT & OPTIMIZATION (S3 BACKEND)
+Objective: Move the Terraform State file (terraform.tfstate) from the local laptop to the Cloud (S3) to prevent data loss and enable team collaboration.
+
+Phase 21: Manual Cloud Setup (The Chicken & Egg)
+Since Terraform cannot create its own storage location before it starts, we must create these resources manually in the AWS Console.
+
+Create S3 Bucket (The Storage):
+
+Service: S3 > Create Bucket
+
+Name: tf-state-praveen2-2025 (Must be globally unique)
+
+Region: us-east-1 (N. Virginia)
+
+Versioning: Enabled (Critical for backups)
+
+Create DynamoDB Table (The Lock):
+
+Service: DynamoDB > Create Table
+
+Name: terraform-locks
+
+Partition Key: LockID (Type: String) (Case Sensitive!)
+
+Region: us-east-1
+
+
+Phase 22: Configure Backend & Consolidate Variables
+We refactored the code to remove hardcoded numbers and enable remote storage.
+
+1. Update Ops-Infra/variables.tf (The Control Panel) Replaces the old variables file.
+
+variable "aws_region" {
+  description = "AWS Region (Always N. Virginia)"
+  default     = "us-east-1"
+}
+
+variable "aws_access_key" { sensitive = true }
+variable "aws_secret_key" { sensitive = true }
+
+variable "key_name" { default = "batch3" }
+variable "ami_id"   { default = "ami-051f7e7f6c2f40dc1" }
+variable "instance_type" { default = "t3.micro" }
+
+# --- SCALING CONFIGURATION ---
+variable "server_count" {
+  description = "Number of servers to launch"
+  default     = 3
+}
+
+variable "app_port" {
+  description = "Port the Flask app runs on"
+  default     = 5000
+}
+
+
+2. Update Ops-Infra/main.tf (The Logic) Adds the backend block and uses the new variables.
+
+# --- 1. REMOTE STATE CONFIGURATION ---
+terraform {
+  backend "s3" {
+    bucket         = "tf-state-praveen2-2025"
+    key            = "finance-system/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
+}
+
+provider "aws" {
+  region     = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
+}
+
+resource "aws_security_group" "web_firewall" {
+  name        = "finance-app-firewall"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = var.app_port  # Uses variable
+    to_port     = var.app_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "app_server" {
+  count         = var.server_count # Uses variable
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  key_name      = var.key_name
+  vpc_security_group_ids = [aws_security_group.web_firewall.id]
+  tags = { Name = "Finance-Server-${count.index + 1}" }
+}
+
+# (Keep the local_file resource for Ansible Inventory here)
+
+
+
+Phase 23: Migration (The "Init" Process)
+Because the backend block loads before variables, we must inject credentials directly into the terminal for the initialization step.
+
+# 1. Inject Credentials into Session
+$Env:AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY"
+$Env:AWS_SECRET_ACCESS_KEY="YOUR_SECRET_KEY"
+$Env:AWS_DEFAULT_REGION="us-east-1"
+
+# 2. Initialize Migration
+terraform init
+# Type 'yes' when prompted to copy state to S3.
+
+Success Criteria:
+
+Terminal says: "Terraform has been successfully initialized!"
+
+Checking the S3 Bucket in AWS Console shows a finance-system folder containing the state file.
+
+
 
 
 

@@ -1,6 +1,5 @@
-
 variable "aws_region" {
-  description = "AWS Region to deploy to"
+  description = "AWS Region to deploy to (Always N. Virginia)"
   default     = "us-east-1"
 }
 
@@ -27,6 +26,17 @@ variable "ami_id" {
 }
 
 variable "instance_type" {
-  description = "EC2 Instance Type (Select t2.micro or t3.micro for Free Tier)"
+  description = "EC2 Instance Type"
   default     = "t3.micro" 
+}
+
+# --- SCALING CONFIGURATION ---
+variable "server_count" {
+  description = "Number of servers to launch in the fleet"
+  default     = 3
+}
+
+variable "app_port" {
+  description = "Port the Flask application runs on"
+  default     = 5000
 }
