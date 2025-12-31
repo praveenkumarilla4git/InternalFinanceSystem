@@ -1098,3 +1098,85 @@ Run:
 PowerShell
 
 minikube stop
+
+
+Phase 32: Package Management (Helm)
+Objective: Install Helm, the "App Store" for Kubernetes. This allows us to install complex tools (like Prometheus Monitoring) with a single command, instead of writing 50+ YAML files manually.
+
+Prerequisite: Minikube must be installed.
+
+Installation (PowerShell as Admin):
+
+Download & Install:
+
+PowerShell
+
+# 1. Download Helm
+Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.13.0-windows-amd64.zip" -OutFile "helm.zip"
+
+# 2. Unzip it
+Expand-Archive helm.zip -DestinationPath .
+
+# 3. Move executable to your tools path
+Move-Item windows-amd64/helm.exe C:\k8s\helm.exe
+
+# 4. Cleanup
+Remove-Item helm.zip
+Remove-Item -Recurse windows-amd64
+Verify Installation:
+
+PowerShell
+
+helm version
+# Expected Output: version.BuildInfo{Version:"v3.13.0"...}
+🔄 The "Rerun" Checklist (Get Back to Ready State)
+Since you destroyed the AWS infrastructure (which was good!), your "Ready State" is now Local Minikube.
+
+To claim you are "caught up" and ready for the next step, run these 3 commands in your PowerShell (Admin):
+
+Wake up the Cluster:
+
+PowerShell
+
+minikube start --memory 2048 --cpus 2
+Deploy your App (from Phase 31):
+
+PowerShell
+
+kubectl apply -f k8s/app.yaml
+Verify Helm (from Phase 32):
+
+PowerShell
+
+helm version
+
+
+📘 PART 10: MONITORING (PROMETHEUS)
+Objective: Install industry-standard monitoring to visualize cluster health (CPU, RAM, Uptime).
+
+Phase 33: Installation (Helm)
+Instead of writing 50+ YAML files, we use Helm to install the standard Prometheus stack.
+
+1. Add Repo:
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm repo update
+
+2. Install:
+   helm install prometheus prometheus-community/prometheus
+
+3. Verify:
+   kubectl get pods
+   (Wait for all pods to show "Running")
+
+Phase 34: Accessing the Dashboard
+The dashboard runs inside the cluster. We must forward a port to access it.
+
+1. Open Tunnel:
+   kubectl port-forward svc/prometheus-server 9090:80
+
+2. View:
+   Open Browser -> http://localhost:9090
+
+3. Useful Queries (Type in Search Bar):
+   - "up" : Shows if pods are alive (1 = Yes, 0 = No).
+   - "container_memory_usage_bytes" : Shows RAM usage graphs.
