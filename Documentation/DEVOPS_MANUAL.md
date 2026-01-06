@@ -880,23 +880,124 @@ resource "aws_instance" "app_server" {
 
 
 
-Phase 23: Migration (The "Init" Process)
-Because the backend block loads before variables, we must inject credentials directly into the terminal for the initialization step.
+📘 PART 7: LOAD BALANCING (THE "TRAFFIC COP")
+Objective: Replace direct server IP access with a single Application Load Balancer (ALB) that automatically distributes traffic to healthy servers.
 
-# 1. Inject Credentials into Session
-$Env:AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY"
-$Env:AWS_SECRET_ACCESS_KEY="YOUR_SECRET_KEY"
-$Env:AWS_DEFAULT_REGION="us-east-1"
+Phase 24: Infrastructure Upgrade (Terraform)
+We updated Ops-Infra/main.tf to add the Application Load Balancer logic.
 
-# 2. Initialize Migration
-terraform init
-# Type 'yes' when prompted to copy state to S3.
+1. Add Data Sources (Top of main.tf):
+   This allows Terraform to automatically find your default VPC and Subnets.
+   
+   data "aws_vpc" "default" { default = true }
+   data "aws_subnets" "default" {
+     filter {
+       name   = "vpc-id"
+       values = [data.aws_vpc.default.id]
+     }
+   }
 
-Success Criteria:
+2. Update Security Group:
+   We added an ingress rule to allow traffic on Port 80 (HTTP) from anywhere (0.0.0.0/0).
 
-Terminal says: "Terraform has been successfully initialized!"
+3. Add Load Balancer Resources (Bottom of main.tf):
+   - Target Group: Registers the 3 servers on Port 5000.
+   - Load Balancer (ALB): The public entry point (Port 80).
+   - Listener: Forwards ALB traffic (Port 80) -> Target Group.
 
-Checking the S3 Bucket in AWS Console shows a finance-system folder containing the state file.
+Phase 25: Deployment & Verification
+1. Apply Infrastructure:
+   Command: terraform apply
+   Result: Terraform creates the ALB and outputs the alb_dns_name.
+
+2. Trigger Deployment:
+   Command: git push
+   Action: GitHub Actions detects the code change, reads the updated inventory.ini (automatically updated by Terraform), and deploys the Docker container to the new fleet.
+
+3. Final Verification:
+   URL: http://finance-alb-xxxx.us-east-1.elb.amazonaws.com
+   Success Criteria: Refreshing the page works 100% of the time, effectively balancing traffic across all 3 nodes.
+
+
+📘 PART 8: DYNAMIC DOCUMENTATION (THE "POOR MAN'S DNS")
+Objective: Solve the problem of changing Load Balancer URLs without paying for a static Domain Name (Route 53).
+
+Phase 26: The "Link Updater" Script
+Since AWS generates a random URL every time we deploy (e.g., finance-alb-123...), we created a Python script to automatically update our documentation.
+
+Create file: update_link.py (in the main folder).
+Content:
+
+import subprocess
+import re
+import os
+
+def update_readme():
+    print("🔄 Fetching Load Balancer URL from Terraform...")
+
+    # 1. Get the URL
+    try:
+        os.chdir("Ops-Infra")
+        result = subprocess.run(["terraform", "output", "-raw", "alb_dns_name"], 
+                                capture_output=True, text=True, shell=True)
+        alb_url = result.stdout.strip()
+        os.chdir("..")
+    except Exception as e:
+        print(f"❌ Error running Terraform: {e}")
+        return
+
+    # 2. Validation
+    if not alb_url or "http" not in alb_url:
+        print(f"❌ Error: Invalid URL found: '{alb_url}'")
+        return
+
+    print(f"✅ Found New URL: {alb_url}")
+
+    # 3. Update README.md
+    readme_path = "README.md"
+    try:
+        with open(readme_path, "r") as f:
+            content = f.read()
+        
+        # Regex to find "**Current Live URL:**" and replace the link
+        pattern = r"\*\*Current Live URL:\*\* .*"
+        replacement = f"**Current Live URL:** {alb_url}"
+        
+        if not re.search(pattern, content):
+            print("❌ Error: Could not find 'Current Live URL' line.")
+            return
+
+        new_content = re.sub(pattern, replacement, content)
+
+        with open(readme_path, "w") as f:
+            f.write(new_content)
+            
+        print("✅ Success! README.md updated locally.")
+
+    except FileNotFoundError:
+        print("❌ Error: Could not find README.md file.")
+
+if __name__ == "__main__":
+    update_readme()
+
+
+Phase 27: The New Workflow
+Instead of manually copying links, the deployment process is now:
+
+1. Deploy: terraform apply (Creates Infrastructure).
+2. Update: python update_link.py (Updates Local README).
+3. Publish: git add . -> git commit -> git push (Updates GitHub).
+
+Result: Users always find the active link on the GitHub Homepage.
+
+Phase 28: Cost Saving (Cleanup)
+To ensure no billing occurs when not working:
+
+Command:
+cd Ops-Infra
+terraform destroy --auto-approve
+
+Result: All 11 resources (ALB, Target Groups, Instances, Security Groups) are deleted. Cost = $0.00.
 
 
 📘 PART 7: LOAD BALANCING (THE "TRAFFIC COP")
@@ -926,10 +1027,108 @@ Phase 25: Deployment & Verification
    URL: http://finance-alb-xxxx.us-east-1.elb.amazonaws.com
    Success Criteria: Refreshing the page works 100% of the time, even if one server in the background is rebooting.
 
+📘 PART 9: CONTAINER ORCHESTRATION (KUBERNETES)
+Objective: Migrate from managing individual servers (Pets) to managing a self-healing cluster (Cattle) using Kubernetes.
+
+Phase 29: Local Cluster Setup (Minikube)
+Instead of paying for AWS EKS during development, we use Minikube to run a Google-grade cluster on a laptop.
+
+Installation (PowerShell as Admin):
+
+Kubectl (The Remote):
+
+PowerShell
+
+Invoke-WebRequest -OutFile "C:\k8s\kubectl.exe" "https://dl.k8s.io/release/v1.29.0/bin/windows/amd64/kubectl.exe"
+$env:Path += ";C:\k8s"
+Minikube (The Cluster):
+
+PowerShell
+
+minikube start --memory 2048 --cpus 2
+(Note: We limited resources to 2GB RAM to prevent laptop crashes).
+
+Phase 30: Declarative Configuration (YAML)
+We replaced manual commands (kubectl run...) with a single Manifest File that describes the entire infrastructure.
+
+File: k8s/app.yaml Key Components:
+
+Deployment: Guarantees 3 Replicas of the Finance App are always running.
+
+Service: Opens Port 5000 (Target) and maps it to a NodePort (30005) for access.
+
+YAML
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: finance
+  template:
+    metadata:
+      labels:
+        app: finance
+    spec:
+      containers:
+      - name: finance-container
+        image: praveenkumarilla459/internal-finance-system:latest
+        ports:
+        - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-service
+spec:
+  type: NodePort
+  selector:
+    app: finance
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30005
+Phase 31: Deployment & Verification
+Workflow:
+
+Launch:
+
+PowerShell
+
+kubectl apply -f k8s/app.yaml
+Verify Fleet:
+
+PowerShell
+
+kubectl get pods
+# Result: 3 pods showing "Running"
+Access Application:
+
+PowerShell
+
+minikube service finance-service
+(This opens a tunnel through the cluster to your localhost).
+
+🧹 Final Cleanup (Save Your RAM!)
+Since Minikube is running inside your laptop, it is eating 2GB of your RAM right now. To stop it and free up your computer:
+
+Go to your PowerShell terminal.
+
+Press Ctrl + C to stop the tunnel (if running).
+
+Run:
+
+PowerShell
+
+minikube stop
 
 📘 PART 8: DYNAMIC DOCUMENTATION (THE "POOR MAN'S DNS")
 Objective: Solve the problem of changing Load Balancer URLs without paying for a static Domain Name (Route 53).
 
+<<<<<<< HEAD:Documentation/documentation2.txt
 Phase 26: The "Link Updater" Script
 Since AWS generates a random URL every time we deploy (e.g., finance-alb-123...), we created a Python script to bridge the gap between Terraform and our users.
 
@@ -1007,3 +1206,85 @@ To ensure no billing occurs when not working:
 Command:
 cd Ops-Infra
 terraform destroy --auto-approve
+=======
+Phase 32: Package Management (Helm)
+Objective: Install Helm, the "App Store" for Kubernetes. This allows us to install complex tools (like Prometheus Monitoring) with a single command, instead of writing 50+ YAML files manually.
+
+Prerequisite: Minikube must be installed.
+
+Installation (PowerShell as Admin):
+
+Download & Install:
+
+PowerShell
+
+# 1. Download Helm
+Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.13.0-windows-amd64.zip" -OutFile "helm.zip"
+
+# 2. Unzip it
+Expand-Archive helm.zip -DestinationPath .
+
+# 3. Move executable to your tools path
+Move-Item windows-amd64/helm.exe C:\k8s\helm.exe
+
+# 4. Cleanup
+Remove-Item helm.zip
+Remove-Item -Recurse windows-amd64
+Verify Installation:
+
+PowerShell
+
+helm version
+# Expected Output: version.BuildInfo{Version:"v3.13.0"...}
+🔄 The "Rerun" Checklist (Get Back to Ready State)
+Since you destroyed the AWS infrastructure (which was good!), your "Ready State" is now Local Minikube.
+
+To claim you are "caught up" and ready for the next step, run these 3 commands in your PowerShell (Admin):
+
+Wake up the Cluster:
+
+PowerShell
+
+minikube start --memory 2048 --cpus 2
+Deploy your App (from Phase 31):
+
+PowerShell
+
+kubectl apply -f k8s/app.yaml
+Verify Helm (from Phase 32):
+
+PowerShell
+
+helm version
+
+
+📘 PART 10: MONITORING (PROMETHEUS)
+Objective: Install industry-standard monitoring to visualize cluster health (CPU, RAM, Uptime).
+
+Phase 33: Installation (Helm)
+Instead of writing 50+ YAML files, we use Helm to install the standard Prometheus stack.
+
+1. Add Repo:
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm repo update
+
+2. Install:
+   helm install prometheus prometheus-community/prometheus
+
+3. Verify:
+   kubectl get pods
+   (Wait for all pods to show "Running")
+
+Phase 34: Accessing the Dashboard
+The dashboard runs inside the cluster. We must forward a port to access it.
+
+1. Open Tunnel:
+   kubectl port-forward svc/prometheus-server 9090:80
+
+2. View:
+   Open Browser -> http://localhost:9090
+
+3. Useful Queries (Type in Search Bar):
+   - "up" : Shows if pods are alive (1 = Yes, 0 = No).
+   - "container_memory_usage_bytes" : Shows RAM usage graphs.
+>>>>>>> ea20facf6063b8b0dfae7b03d0baeb91137aff99:Documentation/DEVOPS_MANUAL.md
