@@ -28,3 +28,30 @@ crash.log
 
 # Ignore the .vscode folder (where the big binary plugins live)
 .vscode/*
+
+
+# --- Security (CRITICAL) ---
+*.pem
+*.tfvars
+.env
+
+# --- Python ---
+finance.db
+__pycache__/
+*.pyc
+venv/
+*_backup.py
+
+# --- Terraform ---
+# Ignore the .terraform directory anywhere in the project
+.terraform/
+
+# State files (Sensitive)
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+
+# --- IDE ---
+.vscode/

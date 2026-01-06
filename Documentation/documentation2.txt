@@ -899,6 +899,111 @@ Terminal says: "Terraform has been successfully initialized!"
 Checking the S3 Bucket in AWS Console shows a finance-system folder containing the state file.
 
 
+📘 PART 7: LOAD BALANCING (THE "TRAFFIC COP")
+Objective: Replace direct server IP access with a single Application Load Balancer (ALB) that automatically distributes traffic to healthy servers and handles failures.
+
+Phase 24: Infrastructure Upgrade (Terraform)
+We modified main.tf to add three critical components:
+1. Target Group: A logical group where we register our 3 servers (Port 5000).
+2. Load Balancer (ALB): The public-facing entry point (Port 80).
+3. Listener: A rule that forwards traffic from the ALB (Port 80) to the Target Group (Port 5000).
+
+Key Code Changes:
+- Security Group: Opened Port 80 (HTTP) to the world.
+- Data Sources: Added aws_vpc and aws_subnets lookups so the ALB knows where to live.
+- Outputs: Added alb_dns_name to print the final URL.
+
+Phase 25: Deployment & Verification
+1. Apply Infrastructure:
+   Command: terraform apply
+   Result: Terraform creates the ALB and automatically updates inventory.ini with the new Server IPs.
+
+2. Trigger Deployment:
+   Command: git push
+   Action: GitHub Actions detects the code change, reads the updated inventory.ini, and deploys the Docker container to the new fleet.
+
+3. Final Verification:
+   URL: http://finance-alb-xxxx.us-east-1.elb.amazonaws.com
+   Success Criteria: Refreshing the page works 100% of the time, even if one server in the background is rebooting.
 
 
+📘 PART 8: DYNAMIC DOCUMENTATION (THE "POOR MAN'S DNS")
+Objective: Solve the problem of changing Load Balancer URLs without paying for a static Domain Name (Route 53).
 
+Phase 26: The "Link Updater" Script
+Since AWS generates a random URL every time we deploy (e.g., finance-alb-123...), we created a Python script to bridge the gap between Terraform and our users.
+
+Create file: update_link.py
+Content:
+
+import subprocess
+import re
+import os
+
+def update_readme():
+    print("🔄 Fetching Load Balancer URL from Terraform...")
+
+    # 1. Get the URL
+    try:
+        os.chdir("Ops-Infra")
+        result = subprocess.run(["terraform", "output", "-raw", "alb_dns_name"], 
+                                capture_output=True, text=True, shell=True)
+        alb_url = result.stdout.strip()
+        os.chdir("..")
+    except Exception as e:
+        print(f"❌ Error running Terraform: {e}")
+        return
+
+    # 2. Validation
+    if not alb_url or "http" not in alb_url:
+        print(f"❌ Error: Invalid URL found: '{alb_url}'")
+        return
+
+    print(f"✅ Found New URL: {alb_url}")
+
+    # 3. Update README.md
+    readme_path = "README.md"
+    try:
+        with open(readme_path, "r") as f:
+            content = f.read()
+        
+        # Regex to find "**Current Live URL:**" and replace the link
+        pattern = r"\*\*Current Live URL:\*\* .*"
+        replacement = f"**Current Live URL:** {alb_url}"
+        
+        new_content = re.sub(pattern, replacement, content)
+
+        with open(readme_path, "w") as f:
+            f.write(new_content)
+            
+        print("✅ Success! README.md updated locally.")
+
+    except FileNotFoundError:
+        print("❌ Error: Could not find README.md file.")
+
+if __name__ == "__main__":
+    update_readme()
+
+
+Phase 27: The Workflow
+Instead of manually copying links, the deployment process is now:
+
+1. Deploy: 
+   terraform apply (Creates Infrastructure).
+
+2. Update: 
+   python update_link.py (Updates Local README).
+
+3. Publish: 
+   git add .
+   git commit -m "Auto-update link"
+   git push
+
+Result: Users always find the active link on the GitHub Homepage, regardless of how often the infrastructure changes.
+
+Phase 28: Cost Saving (Cleanup)
+To ensure no billing occurs when not working:
+
+Command:
+cd Ops-Infra
+terraform destroy --auto-approve
